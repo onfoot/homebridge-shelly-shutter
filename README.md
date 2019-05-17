@@ -14,7 +14,7 @@ An entry in `config.json` is needed
 
 ```
 {
-    "accessory": "ShellyShutter",
+    "accessory": "shelly-shutter",
     "name": "<e.g. Porch>",
     "ip": "<shelly's ip address>"
 }
