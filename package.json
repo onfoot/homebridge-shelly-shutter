@@ -1,0 +1,23 @@
+{
+  "name": "homebridge-shelly-shutter",
+  "version": "0.0.1",
+  "description": "A Homebridge plugin for Shelly 2.5 switch used as a shutter",
+  "license": "MIT",
+  "keywords": [
+    "homebridge-plugin",
+    "shelly",
+    "2.5"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/onfoot/homebridge-shelly-switch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/onfoot/homebridge-shelly-switch/issues"
+  },
+  "homepage": "https://github.com/onfoot/homebridge-shelly-switch",
+  "engines": {
+    "node": ">=10.0.0",
+    "homebridge": ">=0.4.45"
+  }
+}
