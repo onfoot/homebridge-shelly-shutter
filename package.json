@@ -1,6 +1,6 @@
 {
   "name": "homebridge-shelly-shutter",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A Homebridge plugin for Shelly 2.5 switch used as a shutter",
   "license": "MIT",
   "keywords": [
