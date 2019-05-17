@@ -6,7 +6,7 @@ There is an excellent and comprehensive [homebridge-shelly](https://github.com/a
 
 ## Installation
 
-`npm -g install https://github.com/onfoot/homebridge-shelly-shutter.git`
+`npm -g install homebridge-shelly-shutter`
 
 ## Configuration
 
