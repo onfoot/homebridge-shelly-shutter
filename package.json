@@ -10,12 +10,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/onfoot/homebridge-shelly-switch.git"
+    "url": "git+https://github.com/onfoot/homebridge-shelly-shutter.git"
   },
   "bugs": {
-    "url": "https://github.com/onfoot/homebridge-shelly-switch/issues"
+    "url": "https://github.com/onfoot/homebridge-shelly-shutter/issues"
   },
-  "homepage": "https://github.com/onfoot/homebridge-shelly-switch",
+  "homepage": "https://github.com/onfoot/homebridge-shelly-shutter",
   "engines": {
     "node": ">=10.0.0",
     "homebridge": ">=0.4.45"
