@@ -26,6 +26,15 @@ class ShellyShutter {
         this.current_status_time = null;
         this.status_timer = null;
         this.target_position = null;
+        this.calibration = null;
+
+        if (config.calibration && config.calibration['touch-down-position']) {
+            const touchDown = config.calibration['touch-down-position'];
+            if (touchDown > 0 && touchDown < 100) {
+                this.log.debug('setting up calibration');
+                this.calibration = {touchDown: touchDown};
+            }
+        }
 
         if (!this.ip) {
             throw new Error('You must provide an ip address of the switch.');
@@ -60,13 +69,43 @@ class ShellyShutter {
         return this.services;
     }
 
+    getActualPosition(value) {
+        if (!this.calibration || !this.calibration.touchDown) {
+            return value;
+        }
+
+        if (value === 0) {
+            return value;
+        }
+
+        let newValue = Math.round(Math.max(0, this.calibration.touchDown + (value / 100) * (100 - this.calibration.touchDown)));
+        this.log(`Calibrated value ${value} - original ${newValue}`);
+        return newValue;
+    }
+
+    getCalibratedPosition(value) {
+        this.log.debug(`getting calibrated position for ${value}`);
+        if (!this.calibration || !this.calibration.touchDown) {
+            return value;
+        }
+
+        if (value === 0) {
+            return value;
+        }
+
+        let newValue = Math.round(Math.max(1, 100.0 * (value - this.calibration.touchDown) / (100.0 - this.calibration.touchDown)));
+
+        this.log(`Original value ${value} - calibrated ${newValue}`);
+        return newValue;
+    }
+
     setTargetPosition(position, callback) {
         var log = this.log;
         log.debug(`setting target position '${position}'`);
 
         this.target_position = position;
 
-        const url = 'http://' + this.ip + `/roller/0/?go=to_pos&roller_pos=${position}`;
+        const url = 'http://' + this.ip + `/roller/0/?go=to_pos&roller_pos=${this.getActualPosition(position)}`;
         log.debug(`url: ${url}`);
         this.sendJSONRequest(url , 'POST')
             .then((response) => {
@@ -108,7 +147,7 @@ class ShellyShutter {
             }
 
             if (!this.target_position) {
-                this.target_position = this.current_status.current_pos;
+                this.target_position = this.getCalibratedPosition(this.current_status.current_pos);
             }
 
             callback(null, this.target_position);
@@ -122,7 +161,7 @@ class ShellyShutter {
                 return;
             }
 
-            callback(null, this.current_status.current_pos);
+            callback(null, this.getCalibratedPosition(this.current_status.current_pos));
         });
     }
 
@@ -176,7 +215,8 @@ class ShellyShutter {
 
             this.log.debug('Updating characteristics');
 
-            this.shutterService.updateCharacteristic(Characteristic.CurrentPosition, this.current_status.current_pos);
+            const currentPosition = this.getCalibratedPosition(this.current_status.current_pos);
+            this.shutterService.updateCharacteristic(Characteristic.CurrentPosition, currentPosition);
             
             this.shutterService.updateCharacteristic(Characteristic.ObstructionDetected, this.current_status.stop_reason === 'obstacle');
 
@@ -184,12 +224,12 @@ class ShellyShutter {
             this.shutterService.updateCharacteristic(Characteristic.PositionState, positionState);
 
             if (positionState === Characteristic.PositionState.STOPPED) {
-                this.log.debug(`Roller is stopped, so setting target position from ${this.target_position} to ${this.current_status.current_pos}`);
-                this.target_position = this.current_status.current_pos;
+                this.log.debug(`Roller is stopped, so setting target position from ${this.target_position} to ${currentPosition}`);
+                this.target_position = currentPosition;
             }
 
             if (this.target_position == null) {
-                this.target_position = this.current_status.current_pos;
+                this.target_position = currentPosition;
             }
 
             this.shutterService.updateCharacteristic(Characteristic.TargetPosition, this.target_position);
