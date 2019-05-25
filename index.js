@@ -15,7 +15,6 @@ module.exports = function(homebridge) {
 };
 
 class ShellyShutter {
-
     constructor(log, config) {
         this.services = [];
         this.log = log;
@@ -78,7 +77,14 @@ class ShellyShutter {
             return value;
         }
 
-        let newValue = Math.round(Math.max(0, this.calibration.touchDown + (value / 100) * (100 - this.calibration.touchDown)));
+        const sourceRange = 100.0;
+        const targetRange = 100.0 - this.calibration.touchDown;
+
+        const fractionValue = value / sourceRange;
+        const rescaledValue = fractionValue * targetRange;
+        const offsetValue = this.calibration.touchDown + rescaledValue;
+        const newValue = Math.round(Math.max(0, offsetValue));
+
         this.log(`Calibrated value ${value} - original ${newValue}`);
         return newValue;
     }
@@ -93,7 +99,12 @@ class ShellyShutter {
             return value;
         }
 
-        let newValue = Math.round(Math.max(1, 100.0 * (value - this.calibration.touchDown) / (100.0 - this.calibration.touchDown)));
+        const sourceRange = 100.0 - this.calibration.touchDown;
+        const targetRange = 100.0;
+        
+        const fractionValue = (value - this.calibration.touchDown) / sourceRange;
+        const rescaledValue = fractionValue * targetRange;
+        const newValue = Math.round(Math.max(1, rescaledValue));
 
         this.log(`Original value ${value} - calibrated ${newValue}`);
         return newValue;
