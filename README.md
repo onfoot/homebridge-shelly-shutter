@@ -41,4 +41,4 @@ Example:
 
 ## TODO
 
-Once Shelly firmware starts reporting the shutter open state more accurately either through MQTT or CoAP, I might switch to those protocols otherwise, as traditional HTTP polling is not as efficient as receiving the status from the device directly. Currently, while the shutter is moving, it's reporting the open-percentage amount as of the previous stop state, not the current estimated one. But the plugin at least tries to adjust the polling intervals according to current state, so the status seen in Home app is good enough.
+Once Shelly firmware starts reporting the shutter open state more accurately either through MQTT or CoAP, I might switch to those protocols otherwise, as traditional HTTP polling is not as efficient as receiving the status from the device directly. Currently, while the shutter is moving, it's reporting the open-percentage value of the target stop state, not the current estimated one. But the plugin at least tries to adjust the polling intervals according to current state, so the status seen in Home app is good enough.
