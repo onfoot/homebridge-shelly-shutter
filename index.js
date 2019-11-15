@@ -3,14 +3,13 @@
 const http = require('http');
 const urllib = require('url');
 
-var Accessory, Service, Characteristic, UUIDGen;
+let Accessory, Service, Characteristic, UUIDGen;
 
-module.exports = function(homebridge) {
+module.exports = function (homebridge) {
     Accessory = homebridge.platformAccessory;
     Service = homebridge.hap.Service;
     Characteristic = homebridge.hap.Characteristic;
     UUIDGen = homebridge.hap.uuid;
-
     homebridge.registerAccessory('homebridge-shelly-shutter', 'shelly-shutter', ShellyShutter);
 };
 
@@ -21,9 +20,10 @@ class ShellyShutter {
         this.name = config.name;
         this.ip = config.ip;
         this.current_status = null;
-        this.status_callbacks = new Array();
+        this.status_callbacks = [];
         this.current_status_time = null;
         this.status_timer = null;
+        this.previous_position = null;
         this.target_position = null;
         this.calibration = null;
 
@@ -31,7 +31,7 @@ class ShellyShutter {
             const touchDown = config.calibration['touch-down-position'];
             if (touchDown > 0 && touchDown < 100) {
                 this.log.debug('setting up calibration');
-                this.calibration = {touchDown: touchDown};
+                this.calibration = { touchDown: touchDown };
             }
         }
 
@@ -61,10 +61,63 @@ class ShellyShutter {
 
         this.services.push(this.shutterService);
 
+        this.moveService = new Service.Switch(`Toggle ${this.name}`, 'toggle');
+        this.moveService.getCharacteristic(Characteristic.On)
+            .on('get', this.checkToggle.bind(this))
+            .on('set', this.doToggle.bind(this));
+        this.services.push(this.moveService);
+
         this.updateStatus(true);
     }
 
-    getServices () {
+    checkToggle(callback) {
+        var log = this.log;
+
+        this.getStatus(false, (error) => {
+            if (error) {
+                callback(error);
+                return;
+            }
+
+            callback(this.current_status.state !== 'stop');
+        });
+    }
+
+    doToggle(state, callback) {
+        var log = this.log;
+
+        this.getStatus(false, (error) => {
+            if (error) {
+                callback(error);
+                return;
+            }
+
+            if (!state) {
+                const url = 'http://' + this.ip + `/roller/0/?go=stop`;
+                log.debug(`url: ${url}`);
+                this.sendJSONRequest(url)
+                    .then((response) => {
+                        this.updateStatus(true);
+                        callback();
+                    })
+                    .catch((e) => {
+                        log.error(`Failed to change target position: ${e}`);
+                        setTimeout(() => { callback(e); this.updateStatus(true); }, 3000);
+                    });
+                return;
+            }
+
+            const lastDirection = this.current_status.last_direction;
+
+            if (lastDirection === 'open') {
+                this.setTargetPosition(0, callback);
+            } else {
+                this.setTargetPosition(100, callback);
+            }
+        });
+    }
+
+    getServices() {
         return this.services;
     }
 
@@ -82,10 +135,10 @@ class ShellyShutter {
 
         const fractionValue = value / sourceRange;
         const rescaledValue = fractionValue * targetRange;
-        const offsetValue = this.calibration.touchDown + rescaledValue;
+        const offsetValue = rescaledValue + this.calibration.touchDown;
         const newValue = Math.round(Math.max(0, offsetValue));
 
-        this.log(`Calibrated value ${value} - original ${newValue}`);
+        this.log.debug(`Calibrated value ${value} - original ${newValue}`);
         return newValue;
     }
 
@@ -101,12 +154,13 @@ class ShellyShutter {
 
         const sourceRange = 100.0 - this.calibration.touchDown;
         const targetRange = 100.0;
-        
-        const fractionValue = (value - this.calibration.touchDown) / sourceRange;
+
+        const offsetValue = value - this.calibration.touchDown;
+        const fractionValue = offsetValue / sourceRange;
         const rescaledValue = fractionValue * targetRange;
         const newValue = Math.round(Math.max(1, rescaledValue));
 
-        this.log(`Original value ${value} - calibrated ${newValue}`);
+        this.log.debug(`Original value ${value} - calibrated ${newValue}`);
         return newValue;
     }
 
@@ -118,10 +172,13 @@ class ShellyShutter {
 
         const url = 'http://' + this.ip + `/roller/0/?go=to_pos&roller_pos=${this.getActualPosition(position)}`;
         log.debug(`url: ${url}`);
-        this.sendJSONRequest(url , 'POST')
+        this.sendJSONRequest(url, 'POST')
             .then((response) => {
-                this.updateStatus(true);
+                this.current_status = response;
+                this.current_status_time = Date.now();
+
                 callback();
+                this.updateStatus(false);
             })
             .catch((e) => {
                 log.error(`Failed to change target position: ${e}`);
@@ -180,16 +237,16 @@ class ShellyShutter {
         let positionState = null;
         switch (this.current_status.state) {
             case 'stop':
-              positionState = Characteristic.PositionState.STOPPED;
-              break;
+                positionState = Characteristic.PositionState.STOPPED;
+                break;
             case 'open':
-              positionState = Characteristic.PositionState.INCREASING;
-              break;
+                positionState = Characteristic.PositionState.INCREASING;
+                break;
             case 'close':
-              positionState = Characteristic.PositionState.DECREASING;
-              break;
+                positionState = Characteristic.PositionState.DECREASING;
+                break;
             default:
-              break;
+                break;
         }
         this.log.debug(`Position state for ${state} is ${positionState}`);
         return positionState;
@@ -226,37 +283,74 @@ class ShellyShutter {
 
             this.log.debug('Updating characteristics');
 
-            const currentPosition = this.getCalibratedPosition(this.current_status.current_pos);
-            this.shutterService.updateCharacteristic(Characteristic.CurrentPosition, currentPosition);
-            
             this.shutterService.updateCharacteristic(Characteristic.ObstructionDetected, this.current_status.stop_reason === 'obstacle');
 
             const positionState = this.positionState(this.current_status.state);
-            this.shutterService.updateCharacteristic(Characteristic.PositionState, positionState);
+
+            let currentPosition = this.getCalibratedPosition(this.current_status.current_pos);
+            this.log.debug(`Reported current position ${currentPosition}`);
 
             if (positionState === Characteristic.PositionState.STOPPED) {
                 this.log.debug(`Roller is stopped, so setting target position from ${this.target_position} to ${currentPosition}`);
                 this.target_position = currentPosition;
+                this.previous_position = currentPosition;
+            } else {
+                const calibratedTarget = this.getCalibratedPosition(this.target_position);
+                this.log.debug(`Calibrated target ${calibratedTarget}, current ${currentPosition}`);
+                if (calibratedTarget === currentPosition) {
+                    this.log.debug('--- Triggered by us');
+
+                    if (this.previous_position) {
+                        currentPosition = this.previous_position;
+                    } else {
+                        switch (positionState) {
+                            case Characteristic.PositionState.INCREASING:
+                                currentPosition = 0;
+                                break;
+                            case Characteristic.PositionState.DECREASING:
+                                currentPosition = 100;
+                                break;
+                        }
+                    }
+                } else {
+                    this.log.debug('--- Triggered by external switch');
+                    this.targetPosition = this.getActualPosition(currentPosition);
+
+                    switch (positionState) {
+                        case Characteristic.PositionState.INCREASING:
+                            this.target_position = 100;
+                            break;
+                        case Characteristic.PositionState.DECREASING:
+                            this.target_position = 0;
+                            break;
+                    }
+
+                }
             }
 
             if (this.target_position == null) {
                 this.target_position = currentPosition;
             }
 
+            this.shutterService.updateCharacteristic(Characteristic.CurrentPosition, currentPosition);
             this.shutterService.updateCharacteristic(Characteristic.TargetPosition, this.target_position);
+            this.shutterService.updateCharacteristic(Characteristic.PositionState, positionState);
+            this.moveService.updateCharacteristic(Characteristic.On, positionState !== Characteristic.PositionState.STOPPED);
+
+            this.log.debug(`Current is ${currentPosition}, target is ${this.target_position}, position state ${positionState}`);
         });
     }
 
     updateInterval() {
         if (!this.current_status) {
-            return 60000;
+            return 10000;
         }
 
         if (this.current_status.state !== 'stop') {
             return 5000; // fast update intervals when the roller is working
         }
 
-        return 60000; // slow update interval for idle states
+        return 10000; // slow update interval for idle states
     }
 
     clearUpdateTimer() {
@@ -276,12 +370,12 @@ class ShellyShutter {
 
         const now = Date.now();
 
-        if (!forced && this.current_status !== null && 
-            this.current_status_time !== null && 
+        if (!forced && this.current_status !== null &&
+            this.current_status_time !== null &&
             (now - this.current_status_time < this.updateInterval())) {
-                this.log.debug('Returning cached status');
-                callback(null);
-                return;
+            this.log.debug('Returning cached status');
+            callback(null);
+            return;
         }
 
         this.clearUpdateTimer();
@@ -295,7 +389,7 @@ class ShellyShutter {
                 this.current_status = response;
                 this.current_status_time = Date.now();
                 const callbacks = this.status_callbacks;
-                this.status_callbacks = new Array();
+                this.status_callbacks = [];
 
                 this.log.debug(`Calling ${callbacks.length} queued callbacks`);
                 callbacks.forEach((element) => {
@@ -306,7 +400,7 @@ class ShellyShutter {
             .catch((e) => {
                 this.log.error(`Error parsing current status info: ${e}`);
                 const callbacks = this.status_callbacks;
-                this.status_callbacks = new Array();
+                this.status_callbacks = [];
 
                 callbacks.forEach((element) => {
                     element(e);
@@ -316,7 +410,7 @@ class ShellyShutter {
             });
     }
 
-    sendJSONRequest (url, method = 'GET', payload = null) {
+    sendJSONRequest(url, method = 'GET', payload = null) {
         return new Promise((resolve, reject) => {
 
             const components = new urllib.URL(url);
@@ -327,9 +421,9 @@ class ShellyShutter {
                 port: components.port,
                 path: components.pathname + (components.search ? components.search : ''),
                 protocol: components.protocol,
-                headers: {'Content-Type': 'application/json'}
+                headers: { 'Content-Type': 'application/json' }
             };
-    
+
             const req = http.request(options, (res) => {
                 res.setEncoding('utf8');
 
@@ -340,7 +434,7 @@ class ShellyShutter {
                         this.log.debug(`Raw response: ${chunks}`);
                         const parsed = JSON.parse(chunks);
                         resolve(parsed);
-                    } catch(e) {
+                    } catch (e) {
                         reject(e);
                     }
                 });
