@@ -26,6 +26,8 @@ class ShellyShutter {
         this.previous_position = null;
         this.target_position = null;
         this.calibration = null;
+        this.notification_port = config.notification_port || null;
+        this.authentication = config.authentication || null;
 
         if (config.calibration && config.calibration['touch-down-position']) {
             const touchDown = config.calibration['touch-down-position'];
@@ -37,6 +39,17 @@ class ShellyShutter {
 
         if (!this.ip) {
             throw new Error('You must provide an ip address of the switch.');
+        }
+
+        if (this.notification_port) {
+            this.log.debug(`Starting status notification server at port ${this.notification_port}`);
+            this.notification_server = http.createServer((req, res) => {
+                this.log.debug(`Handling notification payload`);
+                this.serverHandler(req, res);
+            });
+            this.notification_server.listen(this.notification_port, () => {
+                this.log.debug(`Started status notification server at port ${this.notification_port}`);
+            });
         }
 
         // HOMEKIT SERVICES
@@ -68,6 +81,20 @@ class ShellyShutter {
         this.services.push(this.moveService);
 
         this.updateStatus(true);
+    }
+
+    serverHandler(req, res) {
+        if (req.url.startsWith('/status')) {
+            this.log.debug(`Status update notification received`);
+            this.updateStatus(true);
+            res.writeHead(200);
+            res.end('OK');
+
+            return;
+        }
+
+        res.writeHead(404);
+        res.end('Not Found');
     }
 
     checkToggle(callback) {
@@ -358,6 +385,10 @@ class ShellyShutter {
     }
 
     setupUpdateTimer() {
+        if (this.notification_server) { // don't schedule status updates for polling - we have them pushed by the switch
+          return;
+        }
+
         this.status_timer = setTimeout(() => { this.updateStatus(true); }, this.updateInterval());
     }
 
@@ -423,6 +454,11 @@ class ShellyShutter {
                 protocol: components.protocol,
                 headers: { 'Content-Type': 'application/json' }
             };
+
+            if (this.authentication) {
+                let credentials = Buffer.from(this.authentication).toString('base64');
+                options.headers['Authorization'] = 'Basic ' + credentials;
+            }
 
             const req = http.request(options, (res) => {
                 res.setEncoding('utf8');
