@@ -20,7 +20,20 @@ An entry in `config.json` is needed
 }
 ```
 
-If your shelly web interface is restricted with login and password, you need to add a `authentication` option with theh value of `<username>:<password>`.
+If you want a toggle button that moves or stops the shutters, you need an option `move-toggle` of value `true`. When `On`, shutters move in the opposite direction of last movement.
+
+Example:
+
+```
+{
+    "accessory": "shelly-shutter",
+    "name": "<e.g. Porch>",
+    "ip": "<shelly's ip address>",
+    "move-toggle": true
+}
+```
+
+If your shelly web interface is restricted with login and password, you need to add a `authentication` option with the value of `<username>:<password>`.
 
 Example for when username and password are "admin" (not recommended!):
 
