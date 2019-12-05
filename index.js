@@ -28,6 +28,7 @@ class ShellyShutter {
         this.calibration = null;
         this.notification_port = config.notification_port || null;
         this.authentication = config.authentication || null;
+        this.move_toggle = config['move-toggle'] || false;
 
         if (config.calibration && config.calibration['touch-down-position']) {
             const touchDown = config.calibration['touch-down-position'];
@@ -74,11 +75,13 @@ class ShellyShutter {
 
         this.services.push(this.shutterService);
 
-        this.moveService = new Service.Switch(`Toggle ${this.name}`, 'toggle');
-        this.moveService.getCharacteristic(Characteristic.On)
-            .on('get', this.checkToggle.bind(this))
-            .on('set', this.doToggle.bind(this));
-        this.services.push(this.moveService);
+        if (this.move_toggle) {
+            this.moveService = new Service.Switch(`Toggle ${this.name}`, 'toggle');
+            this.moveService.getCharacteristic(Characteristic.On)
+                .on('get', this.checkToggle.bind(this))
+                .on('set', this.doToggle.bind(this));
+            this.services.push(this.moveService);
+        }
 
         this.updateStatus(true);
     }
@@ -106,7 +109,8 @@ class ShellyShutter {
                 return;
             }
 
-            callback(this.current_status.state !== 'stop');
+            log.debug(`Sending status ${this.current_status.state !== 'stop'}`);
+            callback(null, this.current_status.state !== 'stop');
         });
     }
 
@@ -362,7 +366,9 @@ class ShellyShutter {
             this.shutterService.updateCharacteristic(Characteristic.CurrentPosition, currentPosition);
             this.shutterService.updateCharacteristic(Characteristic.TargetPosition, this.target_position);
             this.shutterService.updateCharacteristic(Characteristic.PositionState, positionState);
-            this.moveService.updateCharacteristic(Characteristic.On, positionState !== Characteristic.PositionState.STOPPED);
+            if (this.move_toggle) {
+                this.moveService.updateCharacteristic(Characteristic.On, positionState !== Characteristic.PositionState.STOPPED);
+            }
 
             this.log.debug(`Current is ${currentPosition}, target is ${this.target_position}, position state ${positionState}`);
         });
