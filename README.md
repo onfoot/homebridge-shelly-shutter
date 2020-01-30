@@ -10,7 +10,7 @@ There is an excellent and comprehensive [homebridge-shelly](https://github.com/a
 
 ## Configuration
 
-An entry in `config.json` is needed
+An entry in `config.json`'s "accessories" section is needed of the following basic form:
 
 ```
 {
@@ -20,7 +20,7 @@ An entry in `config.json` is needed
 }
 ```
 
-If you want a toggle button that moves or stops the shutters, you need an option `move-toggle` of value `true`. When `On`, shutters move in the opposite direction of last movement.
+If you want a toggle button that moves or stops the shutters, you need an option `move-toggle` of value `true`. When the toggle is `On`, shutters move in the opposite direction of last movement.
 
 Example:
 
@@ -46,7 +46,7 @@ Example for when username and password are "admin" (not recommended!):
 }
 ```
 
-As of 1.5.6 version of the switch firmware, Shellies 2.5 in shutter mode gained the ability to call action URLs in the event of shutters starting and stopping moving. This frees the plugin from constantly polling the status of the switch, and instead will get pinged on the status update, which improves responsiveness of any HomeKit actions that could be performed, especially when using the physical shutter switch or an automation. For example, if it's dark outside, after I open the shutters on our patio, the patio light is turned on for a few minutes. When I close the shutters, the light turns off.
+As of 1.5.6 version of the switch firmware, Shellies 2.5 in shutter mode gained the ability to call action URLs in the event of shutters starting and stopping moving. This frees the plugin from constantly polling the status of the switch, and instead will get pinged on the status update, which improves responsiveness of any HomeKit actions that could be performed, especially when using the physical shutter switch or an automation. For example, if it's dark outside, after I open the shutters on the patio, the patio light is turned on for a few minutes. When I close the shutters, the light turns off.
 
 If you want to set up the notifications, you need to add a `notification_port` option with a specified HTTP port on which the plugin will listen.
 
