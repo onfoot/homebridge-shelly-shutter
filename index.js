@@ -173,8 +173,17 @@ class ShellyShutter {
         return newValue;
     }
 
-    getCalibratedPosition(value) {
-        this.log.debug(`getting calibrated position for ${value}`);
+    getCalibratedPosition(value, status) {
+        this.log.debug(`getting calibrated position for ${value}, status? ${status}`);
+
+        if (status != null) {
+            this.log.debug(`${status.positioning === false} ${status.state}`);
+        }
+        if (status != null && status.positioning === false && status.state === 'stop') {
+            this.log.debug('Returning non-positioning value');
+            return status.last_direction === 'close' ? 0 : 100;
+        }
+
         if (!this.calibration || !this.calibration.touchDown) {
             return value;
         }
@@ -201,7 +210,23 @@ class ShellyShutter {
 
         this.target_position = position;
 
-        const url = 'http://' + this.ip + `/roller/0/?go=to_pos&roller_pos=${this.getActualPosition(position)}`;
+        let url = '';
+        if (this.current_status && this.current_status.positioning === false) {
+            let target = '';
+            if (position > 50) {
+                target = 'open';
+                this.target_position = 100;
+            } else {
+                target = 'close';
+                this.target_position = 0;
+            }
+
+            log.debug(`the shutter is not calibrated, target position is ${target}`);
+
+            url = 'http://' + this.ip + `/roller/0/?go=${target}`;
+        } else {
+            url = 'http://' + this.ip + `/roller/0/?go=to_pos&roller_pos=${this.getActualPosition(position)}`;
+        }
         log.debug(`url: ${url}`);
         this.sendJSONRequest(url, 'POST')
             .then((response) => {
@@ -246,7 +271,7 @@ class ShellyShutter {
             }
 
             if (!this.target_position) {
-                this.target_position = this.getCalibratedPosition(this.current_status.current_pos);
+                this.target_position = this.getCalibratedPosition(this.current_status.current_pos, this.current_status);
             }
 
             callback(null, this.target_position);
@@ -260,7 +285,7 @@ class ShellyShutter {
                 return;
             }
 
-            callback(null, this.getCalibratedPosition(this.current_status.current_pos));
+            callback(null, this.getCalibratedPosition(this.current_status.current_pos, this.current_status));
         });
     }
 
@@ -318,7 +343,7 @@ class ShellyShutter {
 
             const positionState = this.positionState(this.current_status.state);
 
-            let currentPosition = this.getCalibratedPosition(this.current_status.current_pos);
+            let currentPosition = this.getCalibratedPosition(this.current_status.current_pos, this.current_status);
             this.log.debug(`Reported current position ${currentPosition}`);
 
             if (positionState === Characteristic.PositionState.STOPPED) {
@@ -326,7 +351,7 @@ class ShellyShutter {
                 this.target_position = currentPosition;
                 this.previous_position = currentPosition;
             } else {
-                const calibratedTarget = this.getCalibratedPosition(this.target_position);
+                const calibratedTarget = this.getCalibratedPosition(this.target_position, this.current_status);
                 this.log.debug(`Calibrated target ${calibratedTarget}, current ${currentPosition}`);
                 if (calibratedTarget === currentPosition) {
                     this.log.debug('--- Triggered by us');
